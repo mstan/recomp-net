@@ -326,6 +326,11 @@ bit the engine's pad layer hands the guest: n64lle masks `0x0040` as
 unmodeled, so there the default opened episodes whose mispredicted fields the
 guest never saw, and a replay that restored nothing would have passed them.
 
+`rnet_rb_driver_start_with_snapshot_interval` accepts a consumer default of
+1–16 ticks between snapshots. Passing zero or calling `rnet_rb_driver_start`
+selects a one-tick default. The existing `SNAP_INTERVAL` environment override
+takes precedence when valid, with the alias lookup order described above.
+
 The loop is the same in both shapes:
 
 ```c

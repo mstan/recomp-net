@@ -1611,6 +1611,13 @@ static const char *rb_host_missing(const RNetRbDriverConfig *cfg, const RNetRbHo
 
 int rnet_rb_driver_start(RNetRbDriver *d, const RNetRbDriverConfig *cfg, const RNetRbHost *host)
 {
+    return rnet_rb_driver_start_with_snapshot_interval(d, cfg, host, 0);
+}
+
+int rnet_rb_driver_start_with_snapshot_interval(RNetRbDriver *d, const RNetRbDriverConfig *cfg,
+                                                const RNetRbHost *host, uint32_t default_interval)
+{
+    enum { SNAP_INTERVAL_MAX = 16 };
     RNetRbConfig rcfg;
     RNetRollbackVTable vt;
     int slots;
@@ -1679,6 +1686,11 @@ int rnet_rb_driver_start(RNetRbDriver *d, const RNetRbDriverConfig *cfg, const R
                   "so there is no wire to run an episode over.\n");
         return 0;
     }
+    if (default_interval > SNAP_INTERVAL_MAX) {
+        rb_log(d, "RB start refused: default snapshot interval exceeds %d ticks\n",
+               SNAP_INTERVAL_MAX);
+        return 0;
+    }
     slots = rb_slot_count(d);
 
     /* Session-settled P (recomp-ui: P = 4 + D) when the host bound one;
@@ -1699,7 +1711,9 @@ int rnet_rb_driver_start(RNetRbDriver *d, const RNetRbDriverConfig *cfg, const R
         }
         d->prediction_cap = rb_env_int(d, "PREDICTION", dflt, 1, 32);
     }
-    d->snap_interval = (uint32_t)rb_env_int(d, "SNAP_INTERVAL", 1, 1, 16);
+    d->snap_interval = (uint32_t)rb_env_int(d, "SNAP_INTERVAL",
+                                           default_interval ? (int)default_interval : 1,
+                                           1, SNAP_INTERVAL_MAX);
     d->seal_timeout_ms = (uint32_t)rb_env_int(d, "EPISODE_TIMEOUT_MS", 2000, 100, 30000);
     d->lockstep_ticks = (uint32_t)rb_env_int(d, "LOCKSTEP_TICKS",
                                              (int)RB_LOCKSTEP_TICKS_DEFAULT, 0, 600);

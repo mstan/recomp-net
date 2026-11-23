@@ -24,7 +24,8 @@ def udp():
     return sock
 
 
-def run(peer, name, slots=2, drops=0, mismatch=False, late=False, permanent=False):
+def run(peer, name, slots=2, drops=0, mismatch=False, late=False, permanent=False,
+        interval=None, snapshot_env=(), expected_interval=1):
     with tempfile.TemporaryDirectory(prefix='rnet-boot-') as temporary:
         folder = Path(temporary)
         selector = selectors.DefaultSelector()
@@ -44,6 +45,7 @@ def run(peer, name, slots=2, drops=0, mismatch=False, late=False, permanent=Fals
                 selector.register(host_side, selectors.EVENT_READ, (guest_side, addresses[remote], remote))
                 selector.register(guest_side, selectors.EVENT_READ, (host_side, addresses[0], 0))
             env = {k: v for k, v in os.environ.items() if not k.startswith(('RNET_', 'RBE_RB_'))}
+            env.update(snapshot_env)
             for s in reserves:
                 s.close()
             for slot in range(slots):
@@ -53,9 +55,11 @@ def run(peer, name, slots=2, drops=0, mismatch=False, late=False, permanent=Fals
                 refusal = 'boot_digest_timeout' if permanent else 'boot_digest_mismatch' if mismatch else '-'
                 log = (folder / ('peer%d.log' % slot)).open('wb')
                 files.append(log)
-                processes.append(subprocess.Popen([str(peer), str(slot), str(slots), bind, remote,
-                                                    str(addresses[0][1]), refusal, str(int(mismatch)),
-                                                    str(int(late)), str(folder)], env=env, stdout=subprocess.PIPE, stderr=log,
+                command = [str(peer), str(slot), str(slots), bind, remote,
+                           str(addresses[0][1]), refusal, str(int(mismatch)), str(int(late)), str(folder)]
+                if interval is not None:
+                    command.append(str(interval))
+                processes.append(subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=log,
                                                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0))
             stop_written = False
             # Peers finish the finite tick workload or the driver's real boot
@@ -104,6 +108,8 @@ def run(peer, name, slots=2, drops=0, mismatch=False, late=False, permanent=Fals
                 reports.append(json.loads(output))
             for f in files:
                 f.flush()
+                assert f' snap_interval={expected_interval} ' in Path(f.name).read_text(
+                    errors='replace'), (name, f.name)
             assert all(not r['unverified'] and not r['failed'] for r in reports), (name, reports)
             if permanent or mismatch:
                 reason = 'boot_digest_timeout' if permanent else 'boot_digest_mismatch'
@@ -146,7 +152,16 @@ def main():
     cases = [('clean', {}), ('lost-first', dict(drops=1)), ('lost-replies', dict(drops=3)),
              ('mismatch-after-loss', dict(drops=1, mismatch=True)), ('permanent-loss', dict(permanent=True)),
              ('three-seat-loss', dict(slots=3, drops=2)), ('four-seat-loss', dict(slots=4, drops=2)),
-             ('retained-boot-digest', dict(late=True))]
+             ('retained-boot-digest', dict(late=True)),
+             ('snapshot-default-four', dict(interval=4, expected_interval=4)),
+             ('snapshot-default-zero', dict(interval=0)),
+             ('snapshot-override', dict(interval=4, snapshot_env={'RNET_RB_SNAP_INTERVAL': '2'},
+                                        expected_interval=2)),
+             ('snapshot-alias', dict(interval=4, snapshot_env={'RNET_RB_SNAP_INTERVAL': '2',
+                                                              'RNET_BOOT_TEST_RB_SNAP_INTERVAL': '16'},
+                                     expected_interval=16)),
+             ('snapshot-invalid-override', dict(interval=4, snapshot_env={'RNET_RB_SNAP_INTERVAL': '17'},
+                                                expected_interval=4))]
     for name, options in cases:
         if not args.case or name == args.case:
             run(args.peer.resolve(), name, **options)

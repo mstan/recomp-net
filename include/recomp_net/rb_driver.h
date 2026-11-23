@@ -248,6 +248,13 @@ void rnet_rb_driver_set_modset(RNetRbDriver *d, const char *text, RNetRbModSetCh
  * seat. Returns 1 on success; 0 with a logged reason otherwise.
  */
 int rnet_rb_driver_start(RNetRbDriver *d, const RNetRbDriverConfig *cfg, const RNetRbHost *host);
+
+/* Start with a consumer-selected default snapshot interval in ticks.
+ * Zero selects the standard default of one tick. Values 1..16 are valid.
+ * SNAP_INTERVAL overrides this default through the existing environment
+ * lookup and range checks. */
+int rnet_rb_driver_start_with_snapshot_interval(RNetRbDriver *d, const RNetRbDriverConfig *cfg,
+                                                const RNetRbHost *host, uint32_t default_interval);
 void rnet_rb_driver_shutdown(RNetRbDriver *d);
 
 /*

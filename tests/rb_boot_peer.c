@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     uint32_t refused_at = 0, sim_at_refusal = 0;
     char ready_path[2048], stop_path[2048], reason[64] = "";
     const char *expected;
-    if (argc != 10) return 2;
+    if (argc != 10 && argc != 11) return 2;
     slot = atoi(argv[1]); slots = atoi(argv[2]); expected = argv[6];
     mismatch = (unsigned)atoi(argv[7]); late = (unsigned)atoi(argv[8]);
     if (slot < 0 || slot >= slots || slots < 2 || slots > RNET_RB_MAX_SLOTS) return 2;
@@ -112,6 +112,7 @@ int main(int argc, char **argv) {
     memset(&config, 0, sizeof(config)); config.session = &session;
     config.local_slot = &slot; config.slot_count = &slots; config.input_delay = &delay;
     config.snap_depth = SNAPS; config.log_prefix = "boot_test";
+    config.env_alias = "RNET_BOOT_TEST_RB";
     memset(&host, 0, sizeof(host)); host.ctx = &p;
     host.snap_save = snap_save; host.snap_load = snap_load; host.snap_has = snap_has;
     host.snap_oldest = snap_oldest; host.snap_drop_after = snap_drop;
@@ -126,7 +127,11 @@ int main(int argc, char **argv) {
         rnet_session_pump(session);
         if (!started) {
             if (!rnet_session_is_running(session)) { rnet_os_sleep_micros(1000); continue; }
-            if (!rnet_rb_driver_start(driver, &config, &host)) break;
+            if (argc == 11) {
+                uint32_t interval = (uint32_t)strtoul(argv[10], NULL, 10);
+                if (!rnet_rb_driver_start_with_snapshot_interval(driver, &config, &host, interval))
+                    break;
+            } else if (!rnet_rb_driver_start(driver, &config, &host)) break;
             started = 1;
         }
         if (late && slot == 1 && !late_sent && p.state.tick >= 180) {
